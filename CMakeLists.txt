@@ -14,3 +14,8 @@ else()
 endif()
 
 target_compile_options(htserve PRIVATE -Wall -Wextra -O2)
+
+# Cross-compile for Windows from Linux:
+#   cmake -S . -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake
+#   cmake --build build-win
+# Or use scripts/build-win.sh (direct gcc) / scripts/build-win-cmake.sh.
