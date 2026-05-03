@@ -331,13 +331,16 @@ static void spawn(sock_t client) {
 
 int main(int argc, char **argv) {
     const char *public_path = ".";
-    if (argc == 1) {
-        /* default */
-    } else if (argc == 3 && strcmp(argv[1], "--public") == 0) {
-        public_path = argv[2];
-    } else {
-        fprintf(stderr, "usage: htserve [--public <path>]\n");
-        return 1;
+    int lan = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--lan") == 0) {
+            lan = 1;
+        } else if (strcmp(argv[i], "--public") == 0 && i + 1 < argc) {
+            public_path = argv[++i];
+        } else {
+            fprintf(stderr, "usage: htserve [--public <path>] [--lan]\n");
+            return 1;
+        }
     }
     if (chdir(public_path) != 0) {
         fprintf(stderr, "cannot chdir to %s\n", public_path);
@@ -358,13 +361,14 @@ int main(int argc, char **argv) {
     struct sockaddr_in a;
     memset(&a, 0, sizeof(a));
     a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(INADDR_ANY);
+    a.sin_addr.s_addr = htonl(lan ? INADDR_ANY : INADDR_LOOPBACK);
     a.sin_port = htons(PORT);
 
     if (bind(srv, (struct sockaddr*)&a, sizeof(a)) != 0) { fprintf(stderr, "bind :%d failed\n", PORT); return 1; }
     if (listen(srv, 64) != 0) { fprintf(stderr, "listen failed\n"); return 1; }
 
-    printf("serving %s on http://localhost:%d/\n", public_path, PORT);
+    if (lan) printf("serving %s on http://0.0.0.0:%d/ (LAN-exposed)\n", public_path, PORT);
+    else     printf("serving %s on http://localhost:%d/\n", public_path, PORT);
     fflush(stdout);
 
     for (;;) {
