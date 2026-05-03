@@ -11,6 +11,8 @@
   #include <winsock2.h>
   #include <ws2tcpip.h>
   #include <process.h>
+  #include <direct.h>
+  #define chdir _chdir
   typedef SOCKET sock_t;
   #define CLOSESOCK closesocket
   #define THREAD_RET unsigned __stdcall
@@ -327,7 +329,21 @@ static void spawn(sock_t client) {
 #endif
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    const char *public_path = ".";
+    if (argc == 1) {
+        /* default */
+    } else if (argc == 3 && strcmp(argv[1], "--public") == 0) {
+        public_path = argv[2];
+    } else {
+        fprintf(stderr, "usage: htserve [--public <path>]\n");
+        return 1;
+    }
+    if (chdir(public_path) != 0) {
+        fprintf(stderr, "cannot chdir to %s\n", public_path);
+        return 1;
+    }
+
 #ifdef _WIN32
     WSADATA w;
     if (WSAStartup(MAKEWORD(2,2), &w) != 0) { fprintf(stderr, "WSAStartup failed\n"); return 1; }
@@ -348,7 +364,7 @@ int main(void) {
     if (bind(srv, (struct sockaddr*)&a, sizeof(a)) != 0) { fprintf(stderr, "bind :%d failed\n", PORT); return 1; }
     if (listen(srv, 64) != 0) { fprintf(stderr, "listen failed\n"); return 1; }
 
-    printf("serving . on http://localhost:%d/\n", PORT);
+    printf("serving %s on http://localhost:%d/\n", public_path, PORT);
     fflush(stdout);
 
     for (;;) {
