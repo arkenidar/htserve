@@ -220,9 +220,11 @@ rebuild_index() {
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>htserve plans</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  @media (max-width: 600px) { body { margin: 1em auto; } }
   nav a { margin-right: 1em; }
   ul { padding-left: 1.2em; }
   li { margin: 0.4em 0; }
