@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Initial server — htserve plans</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  h1, h2, h3 { line-height: 1.2; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; }
+  code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { text-align: left; padding: 0.5em 0.7em; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f4f4f4; }
+  nav a { margin-right: 1em; }
+  blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #555; margin-left: 0; }
+</style>
+
+<nav>
+  <a href="../index.html">&larr; Docs home</a>
+  <a href="index.html">All plans</a>
+</nav>
+
+<h1>Initial server</h1>
+<h2>Context</h2>
+<p>Needed a tiny zero-dependency HTTP static-file server for local development and quick file sharing — small enough to be a single C99 source file, portable to Linux and Windows, no external libraries beyond the platform sockets API.</p>
+<h2>What was done</h2>
+<p>Single-file C99 HTTP server in <code>src/htserve.c</code> (~340 lines). Listens on port 8880, serves <code>GET</code> requests for static files from the current working directory. Features:</p>
+<ul>
+<li><code>HTTP/1.0</code> responses with <code>Connection: close</code>.</li>
+<li><code>GET</code> only; rejects other methods with <code>405</code>.</li>
+<li>One thread per connection (<code>pthread</code> on POSIX, <code>_beginthreadex</code> on Windows).</li>
+<li>Built-in MIME type table for common web assets.</li>
+<li>URL decoding and basic path-traversal protection (rejects <code>..</code>, <code></code>, <code>:</code>).</li>
+<li>Directory listing when no <code>index.html</code> is present, with HTML escaping and URL encoding.</li>
+<li>5-second <code>recv</code> timeout per connection.</li>
+</ul>
+<p>CMake build configured for both POSIX and Windows (linking <code>ws2_32</code> on Windows).</p>
+<h2>Files</h2>
+<ul>
+<li><code>src/htserve.c</code></li>
+<li><code>CMakeLists.txt</code></li>
+</ul>
+<h2>Source</h2>
+<p>Commit <code>915d58b</code> — initial commit. This plan is reconstructed post-hoc from the commit; no contemporaneous plan-mode file existed.</p>
+</html>

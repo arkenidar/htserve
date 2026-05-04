@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Loopback default with opt-in --lan — htserve plans</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  h1, h2, h3 { line-height: 1.2; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; }
+  code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { text-align: left; padding: 0.5em 0.7em; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f4f4f4; }
+  nav a { margin-right: 1em; }
+  blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #555; margin-left: 0; }
+</style>
+
+<nav>
+  <a href="../index.html">&larr; Docs home</a>
+  <a href="index.html">All plans</a>
+</nav>
+
+<h1>Loopback default with opt-in --lan</h1>
+<h2>Context</h2>
+<p>The server originally bound to <code>INADDR_ANY</code> (<code>0.0.0.0</code>), making it reachable from any host on the LAN by default. For a development-grade tool with no authentication, no TLS, and minimal request validation, this is a footgun — running the server on a coffee-shop wifi exposes the served directory to every other client on that network.</p>
+<h2>What was done</h2>
+<p>Changed the default bind address to <code>INADDR_LOOPBACK</code> (<code>127.0.0.1</code>), so by default the server is only reachable from the same machine. Added a <code>--lan</code> flag to opt into the previous behaviour (bind on <code>0.0.0.0</code> for LAN exposure).</p>
+<p>Startup log now distinguishes the two cases:</p>
+<ul>
+<li>Default: <code>serving . on http://localhost:8880/</code></li>
+<li>With <code>--lan</code>: <code>serving . on http://0.0.0.0:8880/ (LAN-exposed)</code></li>
+</ul>
+<h2>Files</h2>
+<ul>
+<li><code>src/htserve.c</code> — <code>lan</code> flag in argv parsing; <code>htonl(lan ? INADDR_ANY : INADDR_LOOPBACK)</code> at bind time; updated startup print.</li>
+</ul>
+<h2>Source</h2>
+<p>Commit <code>51d190e</code> — "Default to loopback bind, add --lan to expose on 0.0.0.0". This plan is reconstructed post-hoc from the commit; no contemporaneous plan-mode file existed.</p>
+</html>
