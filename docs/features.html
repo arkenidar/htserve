@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>htserve — features &amp; limitations</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; }
+  code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
+  nav a { margin-right: 1em; }
+</style>
+
+<nav>
+  <a href="index.html">&larr; Home</a>
+  <a href="build.html">Build</a>
+  <a href="usage.html">Usage</a>
+</nav>
+
+<h1>Features &amp; limitations</h1>
+
+<h2>Features</h2>
+<ul>
+  <li><code>GET</code> only; <code>HTTP/1.0</code> responses with <code>Connection: close</code>.</li>
+  <li>Directory listing when no <code>index.html</code> is present (sorted: directories first, then case-insensitive by name; HTML files bolded).</li>
+  <li>Built-in MIME types for common web assets: html, css, js, mjs, wasm, json, svg, png, jpg, gif, ico, txt, data.</li>
+  <li>URL decoding and basic path-traversal protection (rejects <code>..</code>, <code>\</code>, <code>:</code> in the request path with <code>400 Bad Request</code>).</li>
+  <li>One thread per connection (<code>pthread</code> on POSIX, <code>_beginthreadex</code> on Windows). 5-second <code>recv</code> timeout.</li>
+  <li>Port auto-fallback when the requested port is busy (see <a href="usage.html">Usage</a>).</li>
+</ul>
+
+<h2>Limitations</h2>
+<ul>
+  <li>No <code>HEAD</code>, <code>POST</code>, or any method other than <code>GET</code>.</li>
+  <li>No keep-alive, no range requests, no compression, no TLS.</li>
+  <li>No access logging beyond a single <code>GET /&lt;path&gt;</code> line per request on stdout.</li>
+  <li>Whole files are <code>fread</code>/<code>send</code>-streamed in 64&nbsp;KiB chunks; no <code>sendfile</code>/zero-copy.</li>
+</ul>
+
+<p>Intended for local development and quick file sharing — not for production exposure.</p>
+</html>

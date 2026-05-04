@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>htserve — documentation</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  h1, h2, h3 { line-height: 1.2; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; }
+  code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { text-align: left; padding: 0.5em 0.7em; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f4f4f4; }
+  nav a { margin-right: 1em; }
+</style>
+
+<h1>htserve</h1>
+<p>Minimal C99 static-file HTTP server. Single source file, no dependencies beyond
+the C standard library and the platform sockets API. Builds on Linux and Windows
+(MinGW-w64 cross-compile supported).</p>
+
+<nav>
+  <a href="usage.html">Usage</a>
+  <a href="build.html">Build</a>
+  <a href="features.html">Features &amp; limitations</a>
+</nav>
+
+<h2>At a glance</h2>
+<pre><code>cmake -B build &amp;&amp; cmake --build build
+./build/htserve --public ./site --port 9000</code></pre>
+
+<h2>Sections</h2>
+<ul>
+  <li><a href="build.html">Build</a> — CMake invocation, Windows cross-compile.</li>
+  <li><a href="usage.html">Usage</a> — CLI flags, examples, port auto-fallback.</li>
+  <li><a href="features.html">Features &amp; limitations</a> — what it does and doesn't do.</li>
+</ul>
+</html>
