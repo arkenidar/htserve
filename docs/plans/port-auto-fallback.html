@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Configurable port with auto-fallback — htserve plans</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  h1, h2, h3 { line-height: 1.2; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; }
+  code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { text-align: left; padding: 0.5em 0.7em; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f4f4f4; }
+  nav a { margin-right: 1em; }
+  blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #555; margin-left: 0; }
+</style>
+
+<nav>
+  <a href="../index.html">&larr; Docs home</a>
+  <a href="index.html">All plans</a>
+</nav>
+
+<h1>Configurable port with auto-fallback</h1>
+<h2>Context</h2>
+<p>The server hard-coded its listening port via <code>#define PORT 8880</code> and aborted with a single error if <code>bind()</code> failed. Two annoyances followed: you couldn't change the port without recompiling, and a leftover instance (or any other process holding 8880) made the next launch fail outright. The goal was to (a) accept a <code>--port</code> flag and (b) keep working when that port is busy by automatically trying the next free one.</p>
+<h2>Approach</h2>
+<ul>
+<li>New <code>--port &lt;n&gt;</code> CLI flag, parsed alongside <code>--public</code> and <code>--lan</code>. Default 8880. Range-validated (1–65535) and rejected on non-numeric input with a clear error.</li>
+<li>Replaced the <code>PORT</code> macro with a runtime <code>int port</code> variable seeded from the CLI.</li>
+<li>Auto-fallback loop around <code>bind()</code>:</li>
+<li>Try <code>bind()</code> with the current port.</li>
+<li>On <code>EADDRINUSE</code> (POSIX) / <code>WSAEADDRINUSE</code> (Windows): increment and retry.</li>
+<li>Cap retries at 20.</li>
+<li>Other <code>bind()</code> errors (e.g. permission denied on a privileged port) fail immediately — no point looping.</li>
+<li>Updated startup log to print the actually-bound port. If it differs from the requested one, print an extra line:</li>
+</ul>
+<pre><code>
+port 8880 busy, using 8881 instead
+serving . on http://localhost:8881/
+</code></pre>
+<h2>Cross-platform notes</h2>
+<ul>
+<li><code>errno</code> after <code>bind()</code> on POSIX vs. <code>WSAGetLastError()</code> on Windows — wrapped with <code>#ifdef _WIN32</code> to read the right error code (<code>WSAEADDRINUSE</code> vs <code>EADDRINUSE</code>).</li>
+<li>Added <code>#include &lt;errno.h&gt;</code> on the POSIX branch; <code>winsock2.h</code> already provides what's needed on Windows.</li>
+</ul>
+<h2>Files</h2>
+<ul>
+<li><code>src/htserve.c</code> — argv loop, the <code>bind()</code> retry loop, startup log.</li>
+</ul>
+<h2>Verification</h2>
+<ul>
+<li><code>htserve --port 9000</code> binds 9000.</li>
+<li>Two instances on <code>--port 18880</code> simultaneously: second logs <code>port 18880 busy, using 18881 instead</code>.</li>
+<li><code>htserve --port 0</code> and <code>--port abc</code> rejected with <code>invalid --port: ...</code>, exit 1.</li>
+<li><code>htserve --port 80</code> (non-root) fails immediately without the retry loop, since <code>EACCES</code>/<code>EPERM</code> is not retried.</li>
+</ul>
+<h2>Source</h2>
+<p>Commit <code>93d8204</code> — "Add --port CLI option with auto-fallback when port is busy". The original Claude-managed plan file got reused for the next task; this file reconstructs the plan from the implemented diff plus the README and <code>docs/usage.html</code>.</p>
+</html>

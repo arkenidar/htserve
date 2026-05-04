@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Windows cross-compile via MinGW-w64 — htserve plans</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  h1, h2, h3 { line-height: 1.2; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; }
+  code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { text-align: left; padding: 0.5em 0.7em; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f4f4f4; }
+  nav a { margin-right: 1em; }
+  blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #555; margin-left: 0; }
+</style>
+
+<nav>
+  <a href="../index.html">&larr; Docs home</a>
+  <a href="index.html">All plans</a>
+</nav>
+
+<h1>Windows cross-compile via MinGW-w64</h1>
+<h2>Context</h2>
+<p>The user wanted a Windows 11 executable of <code>htserve</code>. The source <code>src/htserve.c</code> was already cross-platform (it has <code>_WIN32</code> branches for <code>winsock2</code>, <code>_beginthreadex</code>, <code>_chdir</code>, etc.) and <code>CMakeLists.txt</code> already had a <code>WIN32</code> branch linking <code>ws2_32</code> with <code>-static -static-libgcc</code> so the resulting <code>.exe</code> runs without extra DLLs. The simplest path from Linux was to cross-compile with MinGW-w64 rather than build natively on Windows.</p>
+<h2>Approach</h2>
+<p>Cross-compile a static x86_64 <code>htserve.exe</code> using <code>x86_64-w64-mingw32-gcc</code>.</p>
+<h3>Toolchain</h3>
+<p>Install once on the build host:</p>
+<pre><code>
+sudo apt-get install -y gcc-mingw-w64-x86-64
+</code></pre>
+<h3>One-shot build (no CMake)</h3>
+<pre><code>
+x86_64-w64-mingw32-gcc -std=c99 -O2 -Wall -Wextra     -static -static-libgcc     src/htserve.c -o build/htserve.exe -lws2_32
+</code></pre>
+<h3>CMake-based build (toolchain file)</h3>
+<pre><code>
+cmake -S . -B build-win-cmake -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake
+cmake --build build-win-cmake
+</code></pre>
+<p>Both produce a fully-static <code>htserve.exe</code> (~100–300 KB).</p>
+<h2>Files</h2>
+<ul>
+<li><code>src/htserve.c</code> — no source changes needed (already had <code>_WIN32</code> branches).</li>
+<li><code>CMakeLists.txt</code> — no changes needed.</li>
+<li><code>cmake/mingw-w64-x86_64.cmake</code> — added: CMake toolchain file pinning compiler, <code>CMAKE_SYSTEM_NAME=Windows</code>, target triple, and search paths.</li>
+<li><code>scripts/build-win.sh</code>, <code>scripts/build-win-cmake.sh</code>, <code>scripts/build-win.bat</code> — added: convenience wrappers.</li>
+</ul>
+<h2>Verification</h2>
+<ul>
+<li><code>file build/htserve.exe</code> reports <code>PE32+ executable (console) x86-64, for MS Windows</code>.</li>
+<li>Optional smoke test under Wine: <code>wine build/htserve.exe --public src</code>, then <code>curl http://localhost:8880/</code> from another terminal.</li>
+<li>On real Windows 11: copy the <code>.exe</code>, run it from <code>cmd</code>/PowerShell, browse <code>http://localhost:8880/</code>. Windows Firewall may prompt on first <code>--lan</code> run.</li>
+</ul>
+<h2>Source</h2>
+<p>Commit <code>a7efee4</code> — "Add Windows cross-compile via MinGW-w64". Curated from <code>~/.claude/plans/could-you-build-htserve-exe-synchronous-giraffe.md</code>.</p>
+</html>
