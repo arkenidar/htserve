@@ -64,3 +64,22 @@ Errors other than `EADDRINUSE` (for example, permission denied on a privileged p
 - No access logging beyond a single `GET /<path>` line per request on stdout.
 
 Intended for local development and quick file sharing — not for production exposure.
+
+## Plans
+
+Implementation plans for each feature live under [docs/plans/](docs/plans/) — a
+markdown source plus a generated HTML page, browsable via the docs site
+(`./build/htserve --public docs`, then visit `/plans/`). They capture the *why*
+behind each change, which doesn't fit in commits or code.
+
+To curate a new plan from a Claude plan-mode file:
+
+```sh
+./scripts/curate-plan.sh ~/.claude/plans/<auto-named>.md <clean-slug>
+```
+
+The script copies the markdown into `docs/plans/<slug>.md`, renders it to
+`<slug>.html` using a built-in awk renderer (no external tools needed), and
+regenerates `docs/plans/index.html`. Run with `--rebuild` to re-render every
+existing plan after, e.g., editing the template. `~/.claude/plans/` remains
+Claude's scratch — only finalized plans get curated in.

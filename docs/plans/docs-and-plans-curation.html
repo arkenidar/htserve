@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Curate Claude plans into docs/plans/ — htserve plans</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+  h1, h2, h3 { line-height: 1.2; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; }
+  code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { text-align: left; padding: 0.5em 0.7em; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f4f4f4; }
+  nav a { margin-right: 1em; }
+  blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #555; margin-left: 0; }
+</style>
+
+<nav>
+  <a href="../index.html">&larr; Docs home</a>
+  <a href="index.html">All plans</a>
+</nav>
+
+<h1>Curate Claude plans into docs/plans/</h1>
+<h2>Context</h2>
+<p>Claude's plan mode writes to <code>~/.claude/plans/&lt;auto-named&gt;.md</code> — per-session scratch outside the repo with noisy filenames. These plans capture the *why* behind a change, context that doesn't survive in commits or code. We want every plan tied to this project preserved in-repo under <code>docs/plans/</code>, in markdown (authoring source) and HTML (so it renders in the existing styled docs site servable via <code>htserve --public docs</code>). Coverage is full project history: pre-plan-mode commits get retroactive stubs, plan-mode features get curated copies, and a helper script makes adding future plans mechanical.</p>
+<h2>Layout</h2>
+<ul>
+<li><code>docs/plans/&lt;slug&gt;.md</code> — curated markdown source.</li>
+<li><code>docs/plans/&lt;slug&gt;.html</code> — generated HTML mirror, same styling as the rest of <code>docs/</code>.</li>
+<li><code>docs/plans/index.html</code> — landing page listing all plans newest-first.</li>
+<li><code>docs/plans/template.html</code> — HTML scaffold the script wraps each plan in.</li>
+<li><code>scripts/curate-plan.sh</code> — copies a Claude plan into <code>docs/plans/</code>, renders it to HTML, and regenerates the index.</li>
+</ul>
+<h2>The script</h2>
+<p><code>curate-plan.sh &lt;source.md&gt; &lt;slug&gt; [--title "..."]</code> does three things:</p>
+<ol>
+<li>Copies <code>&lt;source.md&gt;</code> to <code>docs/plans/&lt;slug&gt;.md</code> (skipped if source already lives there).</li>
+<li>Renders markdown → HTML using a built-in awk-based renderer (no pandoc needed). Handles headings, fenced code, inline code, links, bold, bullet lists, simple pipe tables, blockquotes.</li>
+<li>Wraps the rendered HTML in <code>template.html</code> and writes <code>docs/plans/&lt;slug&gt;.html</code>.</li>
+<li>Regenerates <code>docs/plans/index.html</code> by listing every <code>*.md</code> in <code>docs/plans/</code> newest-first by mtime.</li>
+</ol>
+<p>Idempotent: re-running on the same slug overwrites without duplicate index entries. <code>--rebuild</code> re-renders every existing plan after, e.g., editing the template.</p>
+<h2>Bootstrap content</h2>
+<p>Six plans seeded:</p>
+<ul>
+<li><code>initial-server</code> — retro stub for commit <code>915d58b</code>.</li>
+<li><code>public-path-flag</code> — retro stub for commit <code>3ce09af</code>.</li>
+<li><code>loopback-default-and-lan</code> — retro stub for commit <code>51d190e</code>.</li>
+<li><code>windows-cross-compile</code> — curated from a real plan-mode file (commit <code>a7efee4</code>).</li>
+<li><code>port-auto-fallback</code> — reconstructed from commit <code>93d8204</code> plus README/docs (the original plan file got reused for this task).</li>
+<li><code>docs-and-plans-curation</code> — this very plan.</li>
+</ul>
+<p>Retro stubs are clearly marked as reconstructed post-hoc.</p>
+<h2>Wiring</h2>
+<ul>
+<li><code>docs/index.html</code> gets a "Plans" link in the nav and in the Sections list.</li>
+<li><code>README.md</code> gets a short "Plans" section explaining the workflow.</li>
+</ul>
+<h2>Future workflow</h2>
+<p>After Claude approves and implements a plan:</p>
+<pre><code>
+./scripts/curate-plan.sh ~/.claude/plans/&lt;auto&gt;.md &lt;clean-slug&gt;
+git add docs/plans/&lt;clean-slug&gt;.{md,html} docs/plans/index.html
+git commit -m "Add plan: &lt;clean-slug&gt;"
+</code></pre>
+<p><code>~/.claude/plans/</code> stays Claude's scratch; only finalized plans get curated.</p>
+<h2>Verification</h2>
+<ul>
+<li><code>./scripts/curate-plan.sh --help</code> prints usage.</li>
+<li><code>./build/htserve --public docs</code> and browse <code>http://localhost:8880/plans/</code>:</li>
+<li>Index lists all six plans newest-first.</li>
+<li>Each plan renders with consistent styling.</li>
+<li>Code blocks, links, lists all readable.</li>
+<li>Round-trip nav: docs home → plans index → individual plan → docs home.</li>
+<li>Re-run the script on an existing slug — confirm idempotency.</li>
+</ul>
+<h2>Source</h2>
+<p>Curated from <code>~/.claude/plans/how-to-handle-server-deep-jellyfish.md</code>.</p>
+</html>
