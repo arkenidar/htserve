@@ -35,6 +35,17 @@ Retro stubs are clearly marked as reconstructed post-hoc.
 - `docs/index.html` gets a "Plans" link in the nav and in the Sections list.
 - `README.md` gets a short "Plans" section explaining the workflow.
 
+## Cross-OS note
+Plan-mode scratch (`~/.claude/plans/` or `C:\Users\<u>\.claude\plans\`)
+lives outside the repo, is per-OS, and individual slots can be silently
+overwritten by any later plan-mode session (auto-named slugs are not
+unique to a feature). On a dual-boot machine, plans authored under one
+OS are also invisible from the other. **Curate or back up every plan
+before starting another plan-mode session, and certainly before
+switching partitions** — otherwise the scratch slot is the only copy
+and it can disappear without warning. The `--public` plan for htserve
+was lost exactly this way.
+
 ## Future workflow
 After Claude approves and implements a plan:
 ```

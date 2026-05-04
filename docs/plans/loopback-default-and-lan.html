@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loopback default with opt-in --lan — htserve plans</title>
+<title>Bind mode: localhost vs 0.0.0.0 (`--lan`) — htserve plans</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
   @media (max-width: 600px) { body { margin: 1em auto; } }
@@ -23,20 +23,51 @@
   <a href="index.html">All plans</a>
 </nav>
 
-<h1>Loopback default with opt-in --lan</h1>
+<h1>Bind mode: localhost vs 0.0.0.0 (<code>--lan</code>)</h1>
 <h2>Context</h2>
-<p>The server originally bound to <code>INADDR_ANY</code> (<code>0.0.0.0</code>), making it reachable from any host on the LAN by default. For a development-grade tool with no authentication, no TLS, and minimal request validation, this is a footgun — running the server on a coffee-shop wifi exposes the served directory to every other client on that network.</p>
-<h2>What was done</h2>
-<p>Changed the default bind address to <code>INADDR_LOOPBACK</code> (<code>127.0.0.1</code>), so by default the server is only reachable from the same machine. Added a <code>--lan</code> flag to opt into the previous behaviour (bind on <code>0.0.0.0</code> for LAN exposure).</p>
-<p>Startup log now distinguishes the two cases:</p>
+<p><a href="src/htserve.c#L361">src/htserve.c:361</a> currently always binds <code>INADDR_ANY</code> (0.0.0.0), exposing the server on every interface — including the LAN — by default. The user wants a way to switch between localhost-only and all-interfaces mode. Safer default for a dev static server is localhost; LAN exposure should be opt-in.</p>
+<h2>Approach</h2>
+<p>Add a flag <code>--lan</code> that binds <code>0.0.0.0</code>. Default (no flag) binds <code>127.0.0.1</code>. The flag composes with the existing <code>--public &lt;path&gt;</code> arg parsing.</p>
+<h3>CLI grammar</h3>
 <ul>
-<li>Default: <code>serving . on http://localhost:8880/</code></li>
-<li>With <code>--lan</code>: <code>serving . on http://0.0.0.0:8880/ (LAN-exposed)</code></li>
+<li><code>htserve</code> → loopback, serves <code>.</code></li>
+<li><code>htserve --lan</code> → 0.0.0.0, serves <code>.</code></li>
+<li><code>htserve --public &lt;path&gt;</code> → loopback, serves <code>&lt;path&gt;</code></li>
+<li><code>htserve --lan --public &lt;path&gt;</code> (or <code>--public &lt;path&gt; --lan</code>) → 0.0.0.0, serves <code>&lt;path&gt;</code></li>
+<li>anything else → usage error, exit 1</li>
 </ul>
-<h2>Files</h2>
+<h3>Implementation in <a href="src/htserve.c">src/htserve.c</a></h3>
+<ol>
+<li>Replace the rigid <code>argc == 1 / argc == 3</code> parsing in <code>main</code> (<a href="src/htserve.c#L332-L341">L332-L341</a>) with a small loop over <code>argv[1..argc-1]</code>:</li>
+</ol>
 <ul>
-<li><code>src/htserve.c</code> — <code>lan</code> flag in argv parsing; <code>htonl(lan ? INADDR_ANY : INADDR_LOOPBACK)</code> at bind time; updated startup print.</li>
+<li><code>--lan</code> → set <code>int lan = 1</code></li>
+<li><code>--public</code> → consume next arg into <code>public_path</code>; error if missing</li>
+<li>else → usage error</li>
 </ul>
+<p>   New usage string: <code>usage: htserve [--public &lt;path&gt;] [--lan]</code>.</p>
+<ol>
+<li>At <a href="src/htserve.c#L361">L361</a>, choose bind address:</li>
+</ol>
+<pre><code>
+   a.sin_addr.s_addr = htonl(lan ? INADDR_ANY : INADDR_LOOPBACK);
+</code></pre>
+<ol>
+<li>Update startup banner (<a href="src/htserve.c#L367">L367</a>) to reflect the mode, e.g.:</li>
+</ol>
+<ul>
+<li>loopback: <code>serving &lt;path&gt; on http://localhost:8880/</code></li>
+<li>lan: <code>serving &lt;path&gt; on http://0.0.0.0:8880/ (LAN-exposed)</code></li>
+</ul>
+<p>No new headers required — <code>INADDR_LOOPBACK</code> is in the same <code>&lt;netinet/in.h&gt;</code> / <code>&lt;winsock2.h&gt;</code> already included.</p>
+<h2>Verification</h2>
+<ol>
+<li><code>cmake --build build</code>.</li>
+<li><code>./build/htserve.exe</code> → banner shows <code>localhost</code>. From another machine on LAN, <code>curl http://&lt;this-host-ip&gt;:8880/</code> → connection refused. From this host, <code>curl http://localhost:8880/</code> → 200.</li>
+<li><code>./build/htserve.exe --lan</code> → banner shows <code>0.0.0.0</code>. LAN curl → 200.</li>
+<li><code>./build/htserve.exe --lan --public src</code> → loopback curl returns listing of <code>src/</code> only.</li>
+<li><code>./build/htserve.exe --bogus</code> / <code>./build/htserve.exe --public</code> → exit 1 with usage.</li>
+</ol>
 <h2>Source</h2>
-<p>Commit <code>51d190e</code> — "Default to loopback bind, add --lan to expose on 0.0.0.0". This plan is reconstructed post-hoc from the commit; no contemporaneous plan-mode file existed.</p>
+<p>Curated from <code>~/.claude/plans/serve-directory-public-path-toasty-oasis.md</code>; implemented in commit <code>51d190e</code>.</p>
 </html>

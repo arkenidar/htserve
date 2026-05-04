@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Initial server — htserve plans</title>
+<title>Plan: Minimal C99 static file HTTP server (`htserve`) — htserve plans</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
   @media (max-width: 600px) { body { margin: 1em auto; } }
@@ -23,26 +23,99 @@
   <a href="index.html">All plans</a>
 </nav>
 
-<h1>Initial server</h1>
+<h1>Plan: Minimal C99 static file HTTP server (<code>htserve</code>)</h1>
 <h2>Context</h2>
-<p>Needed a tiny zero-dependency HTTP static-file server for local development and quick file sharing — small enough to be a single C99 source file, portable to Linux and Windows, no external libraries beyond the platform sockets API.</p>
-<h2>What was done</h2>
-<p>Single-file C99 HTTP server in <code>src/htserve.c</code> (~340 lines). Listens on port 8880, serves <code>GET</code> requests for static files from the current working directory. Features:</p>
-<ul>
-<li><code>HTTP/1.0</code> responses with <code>Connection: close</code>.</li>
-<li><code>GET</code> only; rejects other methods with <code>405</code>.</li>
-<li>One thread per connection (<code>pthread</code> on POSIX, <code>_beginthreadex</code> on Windows).</li>
-<li>Built-in MIME type table for common web assets.</li>
-<li>URL decoding and basic path-traversal protection (rejects <code>..</code>, <code></code>, <code>:</code>).</li>
-<li>Directory listing when no <code>index.html</code> is present, with HTML escaping and URL encoding.</li>
-<li>5-second <code>recv</code> timeout per connection.</li>
-</ul>
-<p>CMake build configured for both POSIX and Windows (linking <code>ws2_32</code> on Windows).</p>
+<p><code>c:codehtserve</code> is empty. Goal: the smallest reasonable C99 program that serves files from the current directory over HTTP on port <strong>8880</strong>, intended purely as a stand-in for <code>file://</code> when a browser refuses local-file access (ES modules, <code>fetch</code>, WASM, CORS-sensitive assets). Built with <strong>CMake + MinGW</strong> (MSYS2 mingw64 confirmed at <code>C:msys64mingw64in</code>). Self-contained <code>.exe</code>, statically linked. Source kept portable to POSIX with one <code>#ifdef _WIN32</code> shim, but Windows is the primary target.</p>
+<p><strong>Explicit non-goals</strong> (per user): no HEAD/POST/PUT, no keep-alive, no caching headers, no config flags. Just <code>GET &lt;file&gt;</code> → bytes, plus a minimal directory index when no <code>index.html</code> exists.</p>
+<p><strong>Concurrency</strong>: thread-per-connection (detached). Required because browsers open 6+ parallel connections per page; serial accept would stall ES-module graphs and large assets behind each other. No shared mutable state → no locking.</p>
 <h2>Files</h2>
+<h3>1. <code>c:codehtserveCMakeLists.txt</code></h3>
+<pre><code>
+cmake_minimum_required(VERSION 3.15)
+project(htserve C)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+add_executable(htserve src/htserve.c)
+if(WIN32)
+  target_link_libraries(htserve PRIVATE ws2_32)
+  target_link_options(htserve PRIVATE -static -static-libgcc)
+else()
+  find_package(Threads REQUIRED)
+  target_link_libraries(htserve PRIVATE Threads::Threads)
+endif()
+target_compile_options(htserve PRIVATE -Wall -Wextra -O2)
+</code></pre>
+<h3>2. <code>c:codehtservesrchtserve.c</code></h3>
+<p>Single C99 file, target ~150 lines. Structure:</p>
 <ul>
-<li><code>src/htserve.c</code></li>
-<li><code>CMakeLists.txt</code></li>
+<li>Socket + thread shim:</li>
+<li><code>_WIN32</code>: <code>&lt;winsock2.h&gt;</code>, <code>&lt;ws2tcpip.h&gt;</code>, <code>WSAStartup</code>, <code>closesocket</code>, <code>SOCKET</code>; <code>_beginthreadex</code> from <code>&lt;process.h&gt;</code> (preferred over <code>CreateThread</code> since the handler uses CRT <code>fopen</code>/<code>fread</code>).</li>
+<li>else: <code>&lt;sys/socket.h&gt;</code>, <code>&lt;netinet/in.h&gt;</code>, <code>&lt;unistd.h&gt;</code>, <code>close</code>, <code>int</code>; <code>pthread_create</code> + <code>pthread_detach</code> (link <code>-lpthread</code>).</li>
+<li><code>main</code>: <code>WSAStartup</code> (Windows), create TCP socket, <code>SO_REUSEADDR</code>, bind <code>0.0.0.0:8880</code>, listen, accept loop. Print <code>serving . on http://localhost:8880/</code> once. For each accepted client socket: <code>malloc</code> a small struct holding the socket handle, spawn a <strong>detached</strong> thread running <code>handle_conn</code>, immediately loop back to <code>accept</code>. Thread frees the struct and closes the socket on exit.</li>
+<li><code>handle_conn(socket)</code>:</li>
 </ul>
+<ol>
+<li><code>recv</code> up to 4 KiB or until <code>
+
+</code>.</li>
+<li>Require request to start with <code>GET </code>; otherwise close (no response needed for the use case).</li>
+<li>Extract path token between <code>GET </code> and the next space; strip query string at <code>?</code>.</li>
+<li>URL-decode <code>%XX</code> in place.</li>
+<li><strong>Safety</strong>: reject if path contains <code>..</code>, <code></code>, or <code>:</code> — reply <code>400</code> and close. Strip leading <code>/</code>.</li>
+<li><strong>Resolve target</strong>: if the path is empty or ends with <code>/</code>, treat it as a directory request — first try <code>&lt;dir&gt;index.html</code>; if that fails, generate a directory listing (see below). Otherwise treat as a file.</li>
+<li><strong>File path</strong>: <code>fopen(path, "rb")</code>. On failure → <code>404 Not Found</code>.</li>
+<li><code>fseek</code>/<code>ftell</code> for size. Pick <code>Content-Type</code> from a small extension table (<code>.html .htm .css .js .mjs .json .wasm .svg .png .jpg .jpeg .gif .ico .txt .data</code>); default <code>application/octet-stream</code>.</li>
+<li>Send <code>HTTP/1.0 200 OK
+Content-Type: ...
+Content-Length: N
+Connection: close
+
+</code>, then stream the file in 64 KiB <code>fread</code>/<code>send</code> chunks.</li>
+<li><code>closesocket</code> / <code>close</code>.</li>
+</ol>
+<h3>Directory listing</h3>
+<ul>
+<li>Use <code>&lt;dirent.h&gt;</code> + <code>opendir</code>/<code>readdir</code>/<code>closedir</code> everywhere — MinGW-w64 provides <code>dirent.h</code>, so no <code>#ifdef</code> is needed for this.</li>
+<li>Use <code>stat()</code> (<code>&lt;sys/stat.h&gt;</code>, available on both) to distinguish files from subdirectories.</li>
+<li>Build the HTML in a dynamically-grown buffer (start 8 KiB, <code>realloc</code> on demand), then send with proper <code>Content-Length</code>.</li>
+<li>Layout:</li>
+</ul>
+<pre><code>
+  &lt;!doctype html&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;/path/&lt;/title&gt;
+  &lt;h1&gt;/path/&lt;/h1&gt;
+  &lt;ul&gt;
+    &lt;li&gt;&lt;a href="../"&gt;../&lt;/a&gt;           (omitted at root)
+    &lt;li&gt;&lt;a href="sub/"&gt;sub/&lt;/a&gt;          (directories, trailing slash)
+    &lt;li&gt;&lt;b&gt;&lt;a href="page.html"&gt;page.html&lt;/a&gt;&lt;/b&gt;   (.html / .htm in &lt;b&gt;)
+    &lt;li&gt;&lt;a href="other.txt"&gt;other.txt&lt;/a&gt;
+  &lt;/ul&gt;
+</code></pre>
+<ul>
+<li>Sort entries: directories first, then files, each group alphabetically (case-insensitive). Use <code>qsort</code>.</li>
+<li>HTML-escape entry names (<code>&amp; &lt; &gt; "</code> → entities) for the visible text.</li>
+<li>Percent-encode the <code>href</code> for safety on space, <code>?</code>, <code>#</code>, <code>%</code>, <code>&amp;</code> (small helper, ~10 lines).</li>
+<li><code>Content-Type: text/html; charset=utf-8</code>.</li>
+</ul>
+<p>That is the entire program. No select, no fancy parsing.</p>
+<h2>Build &amp; run</h2>
+<pre><code>
+cd c:codehtserve
+cmake -G "MinGW Makefiles" -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+# then, in any directory you want to serve:
+c:codehtserveuildhtserve.exe
+</code></pre>
+<h2>Verification</h2>
+<ol>
+<li>Build clean under <code>-Wall -Wextra</code>.</li>
+<li><code>htserve.exe</code> runs on a vanilla Windows box with no MSYS on PATH (static link works).</li>
+<li><code>Invoke-WebRequest http://localhost:8880/CMakeLists.txt</code> returns 200 with matching bytes and correct <code>Content-Length</code>.</li>
+<li>Loading an <code>index.html</code> that uses ES modules / <code>fetch</code> works in a browser (the original motivation — replaces <code>file://</code>).</li>
+<li><code>http://localhost:8880/../something</code> returns 400 (traversal blocked).</li>
+<li><code>http://localhost:8880/missing</code> returns 404.</li>
+<li><code>http://localhost:8880/</code> in a directory with no <code>index.html</code> shows a listing; subdirectories have trailing <code>/</code>, <code>.html</code>/<code>.htm</code> entries are bold, and <code>..</code> link appears for non-root directories.</li>
+<li>Clicking a directory link navigates into it; clicking a file link serves it.</li>
+</ol>
 <h2>Source</h2>
-<p>Commit <code>915d58b</code> — initial commit. This plan is reconstructed post-hoc from the commit; no contemporaneous plan-mode file existed.</p>
+<p>Curated from <code>~/.claude/plans/cmake-use-mingw-flickering-firefly.md</code>; implemented in commit <code>915d58b</code>.</p>
 </html>
