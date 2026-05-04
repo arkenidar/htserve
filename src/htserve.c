@@ -22,13 +22,15 @@
   #include <arpa/inet.h>
   #include <unistd.h>
   #include <pthread.h>
+  #include <errno.h>
   typedef int sock_t;
   #define CLOSESOCK close
   #define INVALID_SOCKET (-1)
   #define THREAD_RET void*
 #endif
 
-#define PORT 8880
+#define DEFAULT_PORT 8880
+#define PORT_RETRY_MAX 20
 #define REQ_MAX 4096
 #define CHUNK 65536
 
@@ -332,13 +334,22 @@ static void spawn(sock_t client) {
 int main(int argc, char **argv) {
     const char *public_path = ".";
     int lan = 0;
+    int port = DEFAULT_PORT;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--lan") == 0) {
             lan = 1;
         } else if (strcmp(argv[i], "--public") == 0 && i + 1 < argc) {
             public_path = argv[++i];
+        } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            long v = strtol(argv[++i], &end, 10);
+            if (!end || *end != 0 || v < 1 || v > 65535) {
+                fprintf(stderr, "invalid --port: %s\n", argv[i]);
+                return 1;
+            }
+            port = (int)v;
         } else {
-            fprintf(stderr, "usage: htserve [--public <path>] [--lan]\n");
+            fprintf(stderr, "usage: htserve [--public <path>] [--port <n>] [--lan]\n");
             return 1;
         }
     }
@@ -359,16 +370,27 @@ int main(int argc, char **argv) {
     setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (const char*)&yes, sizeof(yes));
 
     struct sockaddr_in a;
-    memset(&a, 0, sizeof(a));
-    a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(lan ? INADDR_ANY : INADDR_LOOPBACK);
-    a.sin_port = htons(PORT);
-
-    if (bind(srv, (struct sockaddr*)&a, sizeof(a)) != 0) { fprintf(stderr, "bind :%d failed\n", PORT); return 1; }
+    int bound = 0;
+    int requested = port;
+    for (int attempt = 0; attempt < PORT_RETRY_MAX && port <= 65535; attempt++, port++) {
+        memset(&a, 0, sizeof(a));
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(lan ? INADDR_ANY : INADDR_LOOPBACK);
+        a.sin_port = htons(port);
+        if (bind(srv, (struct sockaddr*)&a, sizeof(a)) == 0) { bound = 1; break; }
+#ifdef _WIN32
+        int err = WSAGetLastError();
+        if (err != WSAEADDRINUSE) { fprintf(stderr, "bind :%d failed (err %d)\n", port, err); return 1; }
+#else
+        if (errno != EADDRINUSE) { fprintf(stderr, "bind :%d failed: %s\n", port, strerror(errno)); return 1; }
+#endif
+    }
+    if (!bound) { fprintf(stderr, "no free port found starting at %d\n", requested); return 1; }
     if (listen(srv, 64) != 0) { fprintf(stderr, "listen failed\n"); return 1; }
 
-    if (lan) printf("serving %s on http://0.0.0.0:%d/ (LAN-exposed)\n", public_path, PORT);
-    else     printf("serving %s on http://localhost:%d/\n", public_path, PORT);
+    if (port != requested) printf("port %d busy, using %d instead\n", requested, port);
+    if (lan) printf("serving %s on http://0.0.0.0:%d/ (LAN-exposed)\n", public_path, port);
+    else     printf("serving %s on http://localhost:%d/\n", public_path, port);
     fflush(stdout);
 
     for (;;) {
